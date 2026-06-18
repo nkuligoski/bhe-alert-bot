@@ -68,12 +68,16 @@ Minimal config shape:
   },
   "state_path": "alertbot.state.json",
   "first_run_behavior": "baseline",
+  "dedupe_mode": "group",
   "page_size": 500,
   "log_level": "INFO"
 }
 ```
 
-AlertBot uses the Attack Path types returned by BloodHound Enterprise as the alert grouping key. State deduplication is tracked by domain, asset group tag, and Attack Path type.
+AlertBot always groups webhook payloads by the Attack Path types returned by BloodHound Enterprise. State deduplication is controlled by `dedupe_mode`:
+
+- `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline. This is the default and matches earlier AlertBot behavior.
+- `finding`: track individual finding rows within each grouped Attack Path. The first payload for a group includes all unrecorded findings, and later payloads include only newly observed finding rows.
 
 ## Setup Flow
 
@@ -87,6 +91,8 @@ Setup retrieves available domains and asset group tags from BHE. It asks whether
 
 - `baseline`: record all current Attack Paths without alerting.
 - `alert`: send alerts for all current Attack Paths.
+
+Setup also asks for the deduplication mode. Use `group` to alert once per grouped Attack Path, or `finding` to keep alerting when new finding rows appear inside an already-seen group.
 
 Scheduled runs are non-interactive.
 
@@ -127,6 +133,10 @@ alertbot run
 AlertBot groups findings by the available Attack Path type returned by BloodHound Enterprise for each monitored domain and monitored asset group tag. Each webhook POST contains one compact domain-specific, tag-specific Attack Path alert with counts and a small set of examples.
 
 State is updated only after successful webhook delivery. Failed deliveries are not marked as alerted, so they remain eligible for retry on the next run.
+
+In `finding` deduplication mode, AlertBot prefers finding ID fields such as `id`, `ID`, `finding_id`, or `Finding ID` for state keys. If a row has no recognized ID field, AlertBot falls back to a stable hash of the row content.
+
+If an existing `group` state file is switched to `finding`, AlertBot treats current findings under already-recorded groups as a finding-level baseline to avoid duplicate alert bursts. Newly observed finding rows after that baseline remain eligible for alerts.
 
 ## Webhook Payload
 

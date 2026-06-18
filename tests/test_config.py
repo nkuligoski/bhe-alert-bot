@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from alertbot.config import config_from_dict, resolve_credentials, resolve_state_path
+import pytest
+
+from alertbot.config import ConfigError, config_from_dict, resolve_credentials, resolve_state_path
 
 
 def test_resolve_credentials_prefers_environment(monkeypatch):
@@ -78,3 +80,33 @@ def test_asset_group_tags_all_mode_does_not_require_selected_tags():
 
     assert config.asset_group_tags.mode == "all"
     assert config.asset_group_tags.selected_tags == []
+
+
+def test_dedupe_mode_defaults_to_group_and_accepts_finding():
+    default = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+        }
+    )
+    finding = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+            "dedupe_mode": "finding",
+        }
+    )
+
+    assert default.dedupe_mode == "group"
+    assert finding.dedupe_mode == "finding"
+
+
+def test_invalid_dedupe_mode_is_rejected():
+    with pytest.raises(ConfigError):
+        config_from_dict(
+            {
+                "bhe": {"tenant": "tenant.example"},
+                "webhook": {"url": "https://webhook.example"},
+                "dedupe_mode": "unsupported",
+            }
+        )

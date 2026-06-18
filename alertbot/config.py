@@ -20,6 +20,7 @@ from .models import (
 DEFAULT_CONFIG_PATH = Path("alertbot.config.json")
 DEFAULT_STATE_PATH = "alertbot.state.json"
 FIRST_RUN_BEHAVIORS = {"baseline", "alert"}
+DEDUPE_MODES = {"group", "finding"}
 DOMAIN_MODES = {"all", "selected"}
 ASSET_GROUP_TAG_MODES = {"all", "selected"}
 
@@ -97,6 +98,7 @@ def config_from_dict(data: Dict[str, Any]) -> AlertBotConfig:
             asset_group_tags=_asset_group_tags_from_config(data),
             state_path=str(data.get("state_path", DEFAULT_STATE_PATH)).strip() or DEFAULT_STATE_PATH,
             first_run_behavior=str(data.get("first_run_behavior", "baseline")).strip() or "baseline",
+            dedupe_mode=str(data.get("dedupe_mode", "group")).strip() or "group",
             page_size=int(data.get("page_size", 500)),
             log_level=str(data.get("log_level", "INFO")).strip() or "INFO",
         )
@@ -162,6 +164,8 @@ def validate_config(config: AlertBotConfig) -> None:
         raise ConfigError("page_size must be greater than 0")
     if config.first_run_behavior not in FIRST_RUN_BEHAVIORS:
         raise ConfigError("first_run_behavior must be 'baseline' or 'alert'")
+    if config.dedupe_mode not in DEDUPE_MODES:
+        raise ConfigError("dedupe_mode must be 'group' or 'finding'")
 
 
 def resolve_credentials(

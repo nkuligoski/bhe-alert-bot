@@ -56,6 +56,7 @@ class AlertBotConfig:
     asset_group_tags: AssetGroupTagSelection = field(default_factory=AssetGroupTagSelection)
     state_path: str = "alertbot.state.json"
     first_run_behavior: str = "baseline"
+    dedupe_mode: str = "group"
     page_size: int = 500
     log_level: str = "INFO"
 
