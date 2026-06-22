@@ -23,7 +23,7 @@ OBJECT_FIELDS = (
     "Asset",
     "AssetName",
 )
-MAX_EXAMPLES = 3
+MAX_FINDINGS = 3
 
 
 def _field(row: Dict[str, Any], name: Optional[str]) -> Optional[Any]:
@@ -90,7 +90,7 @@ def _distinct_any_field_count(rows: list[Dict[str, Any]], field_names: tuple[str
 
 
 def _compact_finding(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a raw BHE detail row into a small webhook-safe example object."""
+    """Convert a raw BHE detail row into a small webhook-safe finding object."""
     return {
         "id": _first_field(row, FINDING_ID_FIELDS),
         "from": _field(row, "FromPrincipal"),
@@ -162,7 +162,7 @@ def build_alert_payload(
     source_count = _distinct_count(group.findings, "FromPrincipal")
     target_count = _distinct_count(group.findings, "ToPrincipal")
     object_count = _distinct_any_field_count(group.findings, OBJECT_FIELDS)
-    examples = [_compact_finding(row) for row in group.findings[:MAX_EXAMPLES]]
+    findings = [_compact_finding(row) for row in group.findings[:MAX_FINDINGS]]
 
     return {
         "source": "bloodhound-enterprise-alertbot",
@@ -190,8 +190,8 @@ def build_alert_payload(
             "target_principals": target_count,
             "objects": object_count,
         },
-        "examples": examples,
-        "additional_findings": len(group.findings) > len(examples),
+        "findings": findings,
+        "additional_findings": len(group.findings) > len(findings),
         "observed_at": observed_at,
         "alerted_at": alerted_at,
     }

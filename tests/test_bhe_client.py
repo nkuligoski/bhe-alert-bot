@@ -1,4 +1,6 @@
-from alertbot.bhe_client import BHEClient
+import pytest
+
+from alertbot.bhe_client import BHEClient, UnsupportedProductEditionError
 from alertbot.models import Credentials
 
 
@@ -85,3 +87,47 @@ def test_fetch_asset_group_tags_reads_nested_tags(monkeypatch):
         {"id": 1, "name": "Tier Zero"},
         {"id": 3, "name": "Server Tier"},
     ]
+
+
+def test_fetch_version_returns_nested_version_data(monkeypatch):
+    def fake_request(method, url, headers, data, timeout):
+        assert method == "GET"
+        assert url == "https://tenant.example:443/api/version"
+        return JsonResponse(
+            {
+                "data": {
+                    "API": {
+                        "current_version": "v2",
+                        "deprecated_version": "v1",
+                    },
+                    "server_version": "1.0.0",
+                    "product_edition": "enterprise",
+                }
+            }
+        )
+
+    monkeypatch.setattr("alertbot.bhe_client.requests.request", fake_request)
+    client = BHEClient(
+        scheme="https",
+        host="tenant.example",
+        port=443,
+        credentials=Credentials(token_id="id", token_key="key", tenant="tenant.example"),
+    )
+
+    assert client.fetch_version()["product_edition"] == "enterprise"
+
+
+def test_ensure_enterprise_edition_rejects_other_editions(monkeypatch):
+    def fake_request(method, url, headers, data, timeout):
+        return JsonResponse({"data": {"product_edition": "community"}})
+
+    monkeypatch.setattr("alertbot.bhe_client.requests.request", fake_request)
+    client = BHEClient(
+        scheme="https",
+        host="tenant.example",
+        port=443,
+        credentials=Credentials(token_id="id", token_key="key", tenant="tenant.example"),
+    )
+
+    with pytest.raises(UnsupportedProductEditionError, match="product_edition"):
+        client.ensure_enterprise_edition()

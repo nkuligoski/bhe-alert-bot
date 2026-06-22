@@ -13,6 +13,23 @@ import requests
 from .models import AlertBotConfig, Credentials
 
 LOGGER = logging.getLogger(__name__)
+ENTERPRISE_PRODUCT_EDITION = "enterprise"
+
+
+class UnsupportedProductEditionError(ValueError):
+    """Raised when the connected BloodHound tenant is not Enterprise edition."""
+
+
+def validate_enterprise_version(version: Dict[str, Any]) -> None:
+    """Validate that version metadata identifies an Enterprise tenant."""
+    product_edition = version.get("product_edition")
+    normalized_edition = str(product_edition or "").strip().lower()
+    if normalized_edition != ENTERPRISE_PRODUCT_EDITION:
+        received = product_edition if product_edition else "unknown"
+        raise UnsupportedProductEditionError(
+            "BloodHound product_edition must be 'enterprise'; "
+            f"received '{received}'."
+        )
 
 
 class BHEClient:
@@ -116,6 +133,22 @@ class BHEClient:
         """Return BHE domains that can be monitored for Attack Paths."""
         data = self._fetch_data("/api/v2/available-domains", params)
         return [item for item in data if isinstance(item, dict)]
+
+    def fetch_version(self) -> Dict[str, Any]:
+        """Return BloodHound version metadata from the API version endpoint."""
+        response = self._request("GET", "/api/version")
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            return {}
+        data = payload.get("data", {})
+        return data if isinstance(data, dict) else {}
+
+    def ensure_enterprise_edition(self) -> Dict[str, Any]:
+        """Validate that the connected BloodHound tenant is Enterprise edition."""
+        version = self.fetch_version()
+        validate_enterprise_version(version)
+        return version
 
     def fetch_asset_group_tags(self) -> List[Dict[str, Any]]:
         """Return asset group tags from the nested asset-group-tags response."""

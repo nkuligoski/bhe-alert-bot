@@ -94,6 +94,8 @@ Setup retrieves available domains and asset group tags from BHE. It asks whether
 
 Setup also asks for the deduplication mode. Use `group` to alert once per grouped Attack Path, or `finding` to keep alerting when new finding rows appear inside an already-seen group.
 
+Setup and scheduled runs first check `/api/version` and stop unless `product_edition` is `enterprise`.
+
 Scheduled runs are non-interactive.
 
 To monitor every asset group tag returned by `/api/v2/asset-group-tags`, use:
@@ -130,7 +132,7 @@ Run for real:
 alertbot run
 ```
 
-AlertBot groups findings by the available Attack Path type returned by BloodHound Enterprise for each monitored domain and monitored asset group tag. Each webhook POST contains one compact domain-specific, tag-specific Attack Path alert with counts and a small set of examples.
+AlertBot groups findings by the available Attack Path type returned by BloodHound Enterprise for each monitored domain and monitored asset group tag. Each webhook POST contains one compact domain-specific, tag-specific Attack Path alert with counts and a small set of findings.
 
 State is updated only after successful webhook delivery. Failed deliveries are not marked as alerted, so they remain eligible for retry on the next run.
 
@@ -171,7 +173,7 @@ Example payload:
     "target_principals": 2,
     "objects": 0
   },
-  "examples": [
+  "findings": [
     {
       "id": 1,
       "from": "alice@example.local",

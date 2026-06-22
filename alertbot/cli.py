@@ -9,7 +9,14 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .bhe_client import BHEClient
+import requests
+
+from .bhe_client import (
+    BHEClient,
+    ENTERPRISE_PRODUCT_EDITION,
+    UnsupportedProductEditionError,
+    validate_enterprise_version,
+)
 from .config import (
     ConfigError,
     DEFAULT_CONFIG_PATH,
@@ -63,10 +70,44 @@ def _prompt_choice(prompt: str, choices: Iterable[str], default: str) -> str:
         print(f"Choose one of: {', '.join(choices)}")
 
 
-def _temporary_credentials(bhe: BHEConfig) -> Credentials:
+def _version_display_value(version: dict, key: str) -> str:
+    """Return a printable version field with a stable fallback."""
+    value = version.get(key)
+    return str(value) if value else "unknown"
+
+
+def _format_api_connection_status(version: dict) -> str:
+    """Build the setup status line for the BHE version pre-check."""
+    server_version = _version_display_value(version, "server_version")
+    product_edition = _version_display_value(version, "product_edition")
+    can_proceed = product_edition.strip().lower() == ENTERPRISE_PRODUCT_EDITION
+    if can_proceed:
+        return f"API connection successful: {server_version}, {product_edition}. Proceed."
+
+    next_step = "AlertBot requires product_edition 'enterprise'; setup cannot proceed."
+    status = "unsuccessful"
+    return (
+        f"API connection {status}: "
+        f"server_version={server_version}, product_edition={product_edition}. "
+        f"{next_step}"
+    )
+
+
+def _setup_credential_input(value: str, default_env: str) -> tuple[str, Optional[str]]:
+    """Return the config env var and optional setup-only credential from a prompt value."""
+    if value == default_env or os.environ.get(value):
+        return value, None
+    return default_env, value
+
+
+def _temporary_credentials(
+    bhe: BHEConfig,
+    token_id: Optional[str] = None,
+    token_key: Optional[str] = None,
+) -> Credentials:
     """Collect setup-only credentials without writing secrets to config."""
-    token_id = os.environ.get(bhe.token_id_env) or _prompt("BHE token ID for setup session")
-    token_key = os.environ.get(bhe.token_key_env) or getpass.getpass("BHE token key for setup session: ")
+    token_id = token_id or os.environ.get(bhe.token_id_env) or _prompt("BHE token ID for setup session")
+    token_key = token_key or os.environ.get(bhe.token_key_env) or getpass.getpass("BHE token key for setup session: ")
     if not token_id or not token_key:
         raise ConfigError("Setup requires BHE credentials to retrieve available domains")
     return Credentials(token_id=token_id, token_key=token_key, tenant=bhe.tenant)
@@ -133,10 +174,12 @@ def _run_setup(args: argparse.Namespace) -> int:
     """Run the interactive setup flow and write initial config/state files."""
     config_path = Path(args.config)
     tenant = _prompt("BHE tenant host", "example.bloodhoundenterprise.io")
-    token_id_env = _prompt("BHE token ID environment variable", "BHE_ID")
-    token_key_env = _prompt("BHE token key environment variable", "BHE_KEY")
+    token_id_input = _prompt("BHE token ID environment variable or setup token ID", "BHE_ID")
+    token_key_input = _prompt("BHE token key environment variable or setup token key", "BHE_KEY")
+    token_id_env, setup_token_id = _setup_credential_input(token_id_input, "BHE_ID")
+    token_key_env, setup_token_key = _setup_credential_input(token_key_input, "BHE_KEY")
     bhe = BHEConfig(tenant=tenant, token_id_env=token_id_env, token_key_env=token_key_env)
-    credentials = _temporary_credentials(bhe)
+    credentials = _temporary_credentials(bhe, token_id=setup_token_id, token_key=setup_token_key)
     client = BHEClient.from_config(
         AlertBotConfig(
             bhe=bhe,
@@ -145,6 +188,18 @@ def _run_setup(args: argparse.Namespace) -> int:
         ),
         credentials,
     )
+
+    try:
+        version = client.fetch_version()
+    except (requests.RequestException, ValueError) as exc:
+        print(_format_api_connection_status({}))
+        raise ConfigError(f"Unable to connect to BHE API version endpoint: {exc}") from exc
+    api_connection_status = _format_api_connection_status(version)
+    try:
+        validate_enterprise_version(version)
+    except UnsupportedProductEditionError as exc:
+        print(api_connection_status)
+        raise ConfigError(str(exc)) from exc
 
     domains = client.fetch_all_available_domains()
     if not domains:
@@ -192,6 +247,7 @@ def _run_setup(args: argparse.Namespace) -> int:
 
     print(f"Wrote config to {config_path}")
     print(f"Initialized state at {resolved_state_path}")
+    print(api_connection_status)
     print("Run 'alertbot run --dry-run' next to preview grouped webhook payloads.")
     return 0
 

@@ -34,8 +34,9 @@ def test_build_alert_payload_includes_grouped_findings():
     )
     assert payload["counts"]["findings"] == 1
     assert payload["additional_findings"] is False
-    assert payload["examples"][0]["id"] == "f-1"
-    assert "raw" not in payload["examples"][0]
+    assert "examples" not in payload
+    assert payload["findings"][0]["id"] == "f-1"
+    assert "raw" not in payload["findings"][0]
 
 
 def test_build_alert_payload_uses_details_endpoint_fields():
@@ -66,11 +67,11 @@ def test_build_alert_payload_uses_details_endpoint_fields():
         "environmentId=domain&assetGroupTagId=0&findingName=Path+Type"
     )
     assert payload["observed_at"] == "2024-08-28T21:21:40.845Z"
-    assert payload["examples"][0]["id"] == 1
-    assert payload["examples"][0]["title"] == "Path Type"
-    assert payload["examples"][0]["from"] == "alice@example.local"
-    assert payload["examples"][0]["to"] == "server01.example.local"
-    assert payload["examples"][0]["summary"] == "alice@example.local -> Path Type -> server01.example.local"
+    assert payload["findings"][0]["id"] == 1
+    assert payload["findings"][0]["title"] == "Path Type"
+    assert payload["findings"][0]["from"] == "alice@example.local"
+    assert payload["findings"][0]["to"] == "server01.example.local"
+    assert payload["findings"][0]["summary"] == "alice@example.local -> Path Type -> server01.example.local"
 
 
 def test_build_alert_payload_summarizes_multiple_findings():
@@ -118,12 +119,12 @@ def test_build_alert_payload_summarizes_multiple_findings():
         "target_principals": 2,
         "objects": 0,
     }
-    assert len(payload["examples"]) == 3
+    assert len(payload["findings"]) == 3
     assert payload["additional_findings"] is False
-    assert payload["examples"][0]["summary"] == "alice@example.local -> Path Type -> server01.example.local"
+    assert payload["findings"][0]["summary"] == "alice@example.local -> Path Type -> server01.example.local"
 
 
-def test_build_alert_payload_limits_examples_and_flags_additional_findings():
+def test_build_alert_payload_limits_findings_and_flags_additional_findings():
     group = AttackPathGroup(
         state_key="domain:Path Type",
         attack_path_id="Path Type",
@@ -144,8 +145,8 @@ def test_build_alert_payload_limits_examples_and_flags_additional_findings():
     payload = build_alert_payload(group, _config(), alerted_at="2026-06-18T00:00:00Z")
 
     assert payload["counts"]["findings"] == 5
-    assert len(payload["examples"]) == 3
-    assert payload["examples"][-1]["id"] == 3
+    assert len(payload["findings"]) == 3
+    assert payload["findings"][-1]["id"] == 3
     assert payload["additional_findings"] is True
 
 
@@ -190,5 +191,5 @@ def test_build_alert_payload_summarizes_object_only_findings():
         "target_principals": 0,
         "objects": 2,
     }
-    assert payload["examples"][0]["object"] == "ADMINISTRATOR@EXAMPLE.LOCAL"
-    assert payload["examples"][0]["summary"] == "ADMINISTRATOR@EXAMPLE.LOCAL has finding T0MarkSensitive"
+    assert payload["findings"][0]["object"] == "ADMINISTRATOR@EXAMPLE.LOCAL"
+    assert payload["findings"][0]["summary"] == "ADMINISTRATOR@EXAMPLE.LOCAL has finding T0MarkSensitive"

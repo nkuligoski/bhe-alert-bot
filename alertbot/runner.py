@@ -107,6 +107,7 @@ def run_alertbot(
     state_path = resolve_state_path(config_path, config.state_path)
     state = load_state(state_path)
     client = client or build_client(config)
+    client.ensure_enterprise_edition()
     run_at = now_fn()
 
     groups = collect_attack_path_groups(client, config)

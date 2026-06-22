@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from alertbot.bhe_client import UnsupportedProductEditionError
 from alertbot.config import config_from_dict, write_config
 from alertbot.models import DeliveryResult
 from alertbot.runner import run_alertbot
@@ -9,8 +12,13 @@ from alertbot.state import load_state
 class FakeClient:
     def __init__(self, rows=None):
         self.rows = rows or [{"attack_path_id": "ap-1", "finding_id": "f-1"}]
+        self.checked_edition = False
+
+    def ensure_enterprise_edition(self):
+        self.checked_edition = True
 
     def fetch_all_available_domains(self):
+        assert self.checked_edition
         return [{"id": "domain", "name": "example.local"}]
 
     def fetch_available_types_for_each_domain(self, domain_id, params=None):
@@ -49,6 +57,30 @@ def test_first_run_baseline_marks_without_payloads(tmp_path):
     assert result.baseline_count == 1
     assert result.delivered_count == 0
     assert state.has_attack_path("domain:0:Type A")
+
+
+def test_run_checks_product_edition_before_collecting_data(tmp_path):
+    class UnsupportedClient(FakeClient):
+        def ensure_enterprise_edition(self):
+            raise UnsupportedProductEditionError(
+                "BloodHound product_edition must be 'enterprise'; received 'community'."
+            )
+
+        def fetch_all_available_domains(self):
+            raise AssertionError("domain collection should not run after failed edition check")
+
+    config = _config(tmp_path, first_run_behavior="alert")
+    config_path = tmp_path / "alertbot.config.json"
+    write_config(config, config_path)
+
+    with pytest.raises(UnsupportedProductEditionError):
+        run_alertbot(
+            config=config,
+            config_path=config_path,
+            dry_run=False,
+            client=UnsupportedClient(),
+            now_fn=lambda: "2026-06-17T00:00:00Z",
+        )
 
 
 def test_dry_run_does_not_mutate_state(tmp_path):
@@ -116,7 +148,7 @@ def test_finding_dedupe_dry_run_only_returns_unseen_findings(tmp_path):
     assert result.candidate_attack_paths == 1
     assert len(result.payloads) == 1
     assert result.payloads[0]["counts"]["findings"] == 1
-    assert result.payloads[0]["examples"][0]["id"] == "f-2"
+    assert result.payloads[0]["findings"][0]["id"] == "f-2"
 
 
 def test_finding_dedupe_marks_only_delivered_findings(tmp_path, monkeypatch):
@@ -230,4 +262,4 @@ def test_switching_group_state_to_finding_dedupe_baselines_existing_group(tmp_pa
 
     assert state.recorded_finding_keys("domain:0:Type A") == {"id:f-1", "id:f-2"}
     assert len(result.payloads) == 1
-    assert result.payloads[0]["examples"][0]["id"] == "f-3"
+    assert result.payloads[0]["findings"][0]["id"] == "f-3"
