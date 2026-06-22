@@ -132,7 +132,7 @@ class SlackProvider:
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": _truncate("*Sample findings*\n" + "\n".join(finding_lines), 3000),
+                        "text": _truncate("*Findings*\n" + "\n".join(finding_lines), 3000),
                     },
                 }
             )
