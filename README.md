@@ -31,12 +31,14 @@ The existing `attack_paths.py` script remains available as the original export/r
 
 By default, AlertBot reads `alertbot.config.json`.
 
-Secrets should come from environment variables:
+Secrets should come from environment variables when possible:
 
 ```sh
 export BHE_ID="..."
 export BHE_KEY="..."
 ```
+
+If you paste a token ID and token key directly during `alertbot setup`, AlertBot writes them into `alertbot.config.json` so `alertbot run --dry-run` can run without exported environment variables. Protect that file if you choose this setup path.
 
 Minimal config shape:
 
@@ -76,7 +78,7 @@ Minimal config shape:
 
 AlertBot always groups webhook payloads by the Attack Path types returned by BloodHound Enterprise. State deduplication is controlled by `dedupe_mode`:
 
-- `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline. This is the default and matches earlier AlertBot behavior.
+- `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline. This is the default.
 - `finding`: track individual finding rows within each grouped Attack Path. The first payload for a group includes all unrecorded findings, and later payloads include only newly observed finding rows.
 
 ## Setup Flow
@@ -87,7 +89,7 @@ Run:
 alertbot setup
 ```
 
-Setup retrieves available domains and asset group tags from BHE. It asks whether to monitor all domains or selected domains, whether to monitor all returned asset group tags or selected tags, and whether the first real run should:
+Setup retrieves available domains and asset group tags from BHE. For domains and asset group tags, enter `all` to monitor everything listed or enter comma-separated numbers such as `1,5,8` to choose specific entries. It also asks whether the first real run should:
 
 - `baseline`: record all current Attack Paths without alerting.
 - `alert`: send alerts for all current Attack Paths.

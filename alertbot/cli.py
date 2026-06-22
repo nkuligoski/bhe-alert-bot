@@ -100,17 +100,32 @@ def _setup_credential_input(value: str, default_env: str) -> tuple[str, Optional
     return default_env, value
 
 
-def _temporary_credentials(
+def _resolve_setup_credentials(
     bhe: BHEConfig,
     token_id: Optional[str] = None,
     token_key: Optional[str] = None,
-) -> Credentials:
-    """Collect setup-only credentials without writing secrets to config."""
-    token_id = token_id or os.environ.get(bhe.token_id_env) or _prompt("BHE token ID for setup session")
-    token_key = token_key or os.environ.get(bhe.token_key_env) or getpass.getpass("BHE token key for setup session: ")
-    if not token_id or not token_key:
+) -> tuple[Credentials, Optional[str], Optional[str]]:
+    """Resolve setup credentials and return any inline values that should be persisted."""
+    config_token_id = token_id
+    config_token_key = token_key
+
+    resolved_token_id = token_id or os.environ.get(bhe.token_id_env)
+    if not resolved_token_id:
+        resolved_token_id = _prompt("BHE token ID for setup session")
+        config_token_id = resolved_token_id
+
+    resolved_token_key = token_key or os.environ.get(bhe.token_key_env)
+    if not resolved_token_key:
+        resolved_token_key = getpass.getpass("BHE token key for setup session: ")
+        config_token_key = resolved_token_key
+
+    if not resolved_token_id or not resolved_token_key:
         raise ConfigError("Setup requires BHE credentials to retrieve available domains")
-    return Credentials(token_id=token_id, token_key=token_key, tenant=bhe.tenant)
+    return (
+        Credentials(token_id=resolved_token_id, token_key=resolved_token_key, tenant=bhe.tenant),
+        config_token_id,
+        config_token_key,
+    )
 
 
 def _asset_group_tag_label(tag: dict) -> str:
@@ -118,6 +133,25 @@ def _asset_group_tag_label(tag: dict) -> str:
     tag_id = tag.get("id")
     tag_name = tag.get("name") or tag_id
     return f"{tag_name} ({tag_id})"
+
+
+def _domain_id(domain: dict) -> str:
+    """Extract the domain identifier used in generated config."""
+    return str(domain.get("id") or domain.get("objectid") or domain.get("objectId") or domain.get("sid"))
+
+
+def _resolve_domain_selection(raw_selection: str, domains: list[dict]) -> list[str]:
+    """Resolve comma-separated domain selection input to configured domain IDs."""
+    selected_domains = []
+    for item in raw_selection.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if item.isdigit() and 1 <= int(item) <= len(domains):
+            selected_domains.append(_domain_id(domains[int(item) - 1]))
+            continue
+        selected_domains.append(item)
+    return selected_domains
 
 
 def _resolve_asset_group_tag_selection(raw_selection: str, tags: list[dict]) -> list[AssetGroupTagConfig]:
@@ -151,7 +185,7 @@ def _resolve_asset_group_tag_selection(raw_selection: str, tags: list[dict]) -> 
 
 
 def _prompt_asset_group_tags(client: BHEClient) -> AssetGroupTagSelection:
-    """Prompt for all or selected asset group tags using live BHE tag data."""
+    """Prompt for all or a numbered asset group tag selection using live BHE tag data."""
     tags = client.fetch_asset_group_tags()
 
     print("\nAvailable asset group tags:")
@@ -159,11 +193,10 @@ def _prompt_asset_group_tags(client: BHEClient) -> AssetGroupTagSelection:
     for index, tag in enumerate(tags, start=1):
         print(f"{index}. {_asset_group_tag_label(tag)}")
 
-    tag_mode = _prompt_choice("Monitor asset group tags", ["selected", "all"], "selected")
-    if tag_mode == "all":
+    raw_selection = _prompt("Monitor asset group tags: all or numbers separated by commas", "1")
+    if raw_selection.lower() == "all":
         return AssetGroupTagSelection(mode="all", selected_tags=[])
 
-    raw_selection = _prompt("Asset group tag numbers, IDs, or names separated by commas", "1")
     selected_tags = _resolve_asset_group_tag_selection(raw_selection, tags)
     if not selected_tags:
         raise ConfigError("At least one asset group tag must be selected")
@@ -179,7 +212,13 @@ def _run_setup(args: argparse.Namespace) -> int:
     token_id_env, setup_token_id = _setup_credential_input(token_id_input, "BHE_ID")
     token_key_env, setup_token_key = _setup_credential_input(token_key_input, "BHE_KEY")
     bhe = BHEConfig(tenant=tenant, token_id_env=token_id_env, token_key_env=token_key_env)
-    credentials = _temporary_credentials(bhe, token_id=setup_token_id, token_key=setup_token_key)
+    credentials, config_token_id, config_token_key = _resolve_setup_credentials(
+        bhe,
+        token_id=setup_token_id,
+        token_key=setup_token_key,
+    )
+    bhe.token_id = config_token_id
+    bhe.token_key = config_token_key
     client = BHEClient.from_config(
         AlertBotConfig(
             bhe=bhe,
@@ -207,22 +246,17 @@ def _run_setup(args: argparse.Namespace) -> int:
 
     print("\nAvailable domains:")
     for index, domain in enumerate(domains, start=1):
-        domain_id = domain.get("id") or domain.get("objectid") or domain.get("objectId") or domain.get("sid")
+        domain_id = _domain_id(domain)
         print(f"{index}. {domain.get('name', domain_id)} ({domain_id})")
 
-    domain_mode = _prompt_choice("Monitor domains", ["all", "selected"], "all")
+    raw_domain_selection = _prompt("Monitor domains: all or numbers separated by commas", "all")
     selected_domains = []
-    if domain_mode == "selected":
-        raw_selection = _prompt("Enter domain numbers, names, or IDs separated by commas")
-        for item in raw_selection.split(","):
-            item = item.strip()
-            if not item:
-                continue
-            if item.isdigit() and 1 <= int(item) <= len(domains):
-                domain = domains[int(item) - 1]
-                selected_domains.append(str(domain.get("id") or domain.get("objectid") or domain.get("objectId") or domain.get("sid")))
-            else:
-                selected_domains.append(item)
+    domain_mode = "all"
+    if raw_domain_selection.lower() != "all":
+        selected_domains = _resolve_domain_selection(raw_domain_selection, domains)
+        if not selected_domains:
+            raise ConfigError("At least one domain must be selected")
+        domain_mode = "selected"
 
     webhook_url = _prompt("Webhook URL")
     state_path = _prompt("State file path", "alertbot.state.json")
