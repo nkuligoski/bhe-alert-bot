@@ -10,6 +10,7 @@ from .bhe_client import BHEClient
 from .config import resolve_credentials, resolve_state_path, validate_config
 from .grouping import collect_attack_path_groups
 from .models import AlertBotConfig, AttackPathGroup, RunResult
+from .providers import build_delivery_payload
 from .state import AlertState, finding_keys_for_group, load_state, save_state
 from .webhook import post_webhook
 
@@ -95,6 +96,16 @@ def _candidate_groups(
     return candidates
 
 
+def _build_delivery_payload(
+    group: AttackPathGroup,
+    config: AlertBotConfig,
+    alerted_at: str,
+) -> dict[str, Any]:
+    """Build the provider-specific payload for one Attack Path group."""
+    alert_payload = build_alert_payload(group, config, alerted_at)
+    return build_delivery_payload(alert_payload, config.webhook)
+
+
 def run_alertbot(
     config: AlertBotConfig,
     config_path: Path,
@@ -126,7 +137,7 @@ def run_alertbot(
         result.baseline_count = len(candidates)
         if dry_run:
             result.payloads = [
-                build_alert_payload(group, config, alerted_at=run_at)
+                _build_delivery_payload(group, config, alerted_at=run_at)
                 for group in candidates
             ]
             return result
@@ -139,7 +150,7 @@ def run_alertbot(
         return result
 
     for group in candidates:
-        payload = build_alert_payload(group, config, alerted_at=run_at)
+        payload = _build_delivery_payload(group, config, alerted_at=run_at)
         if dry_run:
             result.payloads.append(payload)
             continue

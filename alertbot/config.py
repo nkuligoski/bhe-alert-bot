@@ -15,6 +15,7 @@ from .models import (
     DomainSelection,
     WebhookConfig,
 )
+from .providers import PROVIDER_NAMES
 
 
 DEFAULT_CONFIG_PATH = Path("alertbot.config.json")
@@ -23,6 +24,7 @@ FIRST_RUN_BEHAVIORS = {"baseline", "alert"}
 DEDUPE_MODES = {"group", "finding"}
 DOMAIN_MODES = {"all", "selected"}
 ASSET_GROUP_TAG_MODES = {"all", "selected"}
+WEBHOOK_PROVIDERS = set(PROVIDER_NAMES) | {"auto"}
 
 
 class ConfigError(ValueError):
@@ -94,6 +96,7 @@ def config_from_dict(data: Dict[str, Any]) -> AlertBotConfig:
             webhook=WebhookConfig(
                 url=str(webhook_data.get("url", "")).strip(),
                 timeout_seconds=float(webhook_data.get("timeout_seconds", 10.0)),
+                provider=str(webhook_data.get("provider", "auto")).strip().lower() or "auto",
             ),
             asset_group_tags=_asset_group_tags_from_config(data),
             state_path=str(data.get("state_path", DEFAULT_STATE_PATH)).strip() or DEFAULT_STATE_PATH,
@@ -153,6 +156,8 @@ def validate_config(config: AlertBotConfig) -> None:
         raise ConfigError("webhook.url is required")
     if config.webhook.timeout_seconds <= 0:
         raise ConfigError("webhook.timeout_seconds must be greater than 0")
+    if config.webhook.provider not in WEBHOOK_PROVIDERS:
+        raise ConfigError("webhook.provider must be 'auto', 'generic', or 'slack'")
     if config.asset_group_tags.mode not in ASSET_GROUP_TAG_MODES:
         raise ConfigError("asset_group_tags.mode must be 'all' or 'selected'")
     if config.asset_group_tags.mode == "selected" and not config.asset_group_tags.selected_tags:

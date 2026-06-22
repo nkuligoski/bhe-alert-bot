@@ -101,6 +101,34 @@ def test_dedupe_mode_defaults_to_group_and_accepts_finding():
     assert finding.dedupe_mode == "finding"
 
 
+def test_webhook_provider_defaults_to_auto_and_accepts_slack():
+    default = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+        }
+    )
+    slack = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example", "provider": "slack"},
+        }
+    )
+
+    assert default.webhook.provider == "auto"
+    assert slack.webhook.provider == "slack"
+
+
+def test_invalid_webhook_provider_is_rejected():
+    with pytest.raises(ConfigError):
+        config_from_dict(
+            {
+                "bhe": {"tenant": "tenant.example"},
+                "webhook": {"url": "https://webhook.example", "provider": "pager"},
+            }
+        )
+
+
 def test_invalid_dedupe_mode_is_rejected():
     with pytest.raises(ConfigError):
         config_from_dict(

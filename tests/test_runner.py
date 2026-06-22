@@ -182,6 +182,42 @@ def test_finding_dedupe_marks_only_delivered_findings(tmp_path, monkeypatch):
     assert state.recorded_finding_keys("domain:0:Type A") == {"id:f-1", "id:f-2"}
 
 
+def test_run_posts_slack_payload_for_slack_webhook(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_post_webhook(url, payload, timeout_seconds):
+        captured["url"] = url
+        captured["payload"] = payload
+        captured["timeout_seconds"] = timeout_seconds
+        return DeliveryResult(success=True, status_code=200)
+
+    monkeypatch.setattr("alertbot.runner.post_webhook", fake_post_webhook)
+    config = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example", "token_id": "id", "token_key": "key"},
+            "webhook": {"url": "https://hooks.slack.com/services/T000/B000/secret"},
+            "state_path": "state.json",
+            "first_run_behavior": "alert",
+        }
+    )
+    config_path = tmp_path / "alertbot.config.json"
+    write_config(config, config_path)
+
+    result = run_alertbot(
+        config=config,
+        config_path=config_path,
+        dry_run=False,
+        client=FakeClient(rows=[{"attack_path_id": "ap-1", "finding_id": "f-1", "Severity": "high"}]),
+        now_fn=lambda: "2026-06-17T00:00:00Z",
+    )
+
+    assert result.delivered_count == 1
+    assert captured["url"] == "https://hooks.slack.com/services/T000/B000/secret"
+    assert captured["payload"]["text"] == "[HIGH] New BloodHound Attack Path: Type A Attack Path in example.local"
+    assert "blocks" in captured["payload"]
+    assert "event_type" not in captured["payload"]
+
+
 def test_group_dedupe_still_suppresses_new_findings_in_seen_group(tmp_path):
     config = _config(tmp_path, first_run_behavior="baseline", dedupe_mode="group")
     config_path = tmp_path / "alertbot.config.json"

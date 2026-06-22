@@ -57,7 +57,8 @@ Minimal config shape:
   },
   "webhook": {
     "url": "https://webhook.example/alertbot",
-    "timeout_seconds": 10.0
+    "timeout_seconds": 10.0,
+    "provider": "auto"
   },
   "asset_group_tags": {
     "mode": "selected",
@@ -80,6 +81,14 @@ AlertBot always groups webhook payloads by the Attack Path types returned by Blo
 
 - `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline. This is the default.
 - `finding`: track individual finding rows within each grouped Attack Path. The first payload for a group includes all unrecorded findings, and later payloads include only newly observed finding rows.
+
+Webhook delivery is controlled by `webhook.provider`:
+
+- `auto`: use Slack formatting for Slack incoming webhook URLs and generic JSON for all other URLs. This is the default.
+- `generic`: send the compact AlertBot JSON payload unchanged.
+- `slack`: send a Slack incoming webhook message with top-level `text` and Block Kit `blocks`.
+
+Slack incoming webhook URLs use hosts such as `hooks.slack.com` or `hooks.slack-gov.com`. Treat those URLs as secrets and do not commit them to version control.
 
 ## Setup Flow
 
@@ -146,6 +155,8 @@ If an existing `group` state file is switched to `finding`, AlertBot treats curr
 
 AlertBot sends JSON using `POST` and treats only `2xx` responses as success.
 
+For `generic` webhooks, or non-Slack URLs when `provider` is `auto`, AlertBot sends this compact JSON shape.
+
 Example payload:
 
 ```json
@@ -193,6 +204,34 @@ Example payload:
 ```
 
 AlertBot builds `attack_path.url` from the configured BHE tenant, monitored domain ID, configured asset group tag ID, and Attack Path type.
+
+For Slack incoming webhooks, AlertBot converts the same alert data into a Slack message payload:
+
+```json
+{
+  "text": "[HIGH] New BloodHound Attack Path: Attack Path Type in example.local",
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "New Attack Path: Attack Path Type"
+      }
+    }
+  ]
+}
+```
+
+## Adding Webhook Providers
+
+AlertBot keeps BHE alert construction separate from destination formatting:
+
+- `alertbot/alert_builder.py` builds the canonical AlertBot alert payload from grouped BHE data.
+- `alertbot/providers/` contains destination-specific formatters.
+- `alertbot/providers/__init__.py` registers providers and handles `auto` detection.
+- `alertbot/webhook.py` handles the HTTP POST transport.
+
+To add a new destination, create a provider module with a unique `name`, `matches_url()`, and `build_payload()`, then register it in `alertbot/providers/__init__.py`.
 
 ## Development Checks
 

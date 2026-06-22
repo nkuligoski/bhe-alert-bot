@@ -32,6 +32,7 @@ class DomainSelection:
 class WebhookConfig:
     url: str
     timeout_seconds: float = 10.0
+    provider: str = "auto"
 
 
 @dataclass
