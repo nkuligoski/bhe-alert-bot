@@ -4,6 +4,8 @@ AlertBot is a Python CLI that turns BloodHound Enterprise Attack Path data into 
 
 Each run checks BHE once, sends any new alerts, and exits. You can schedule it with cron, a container scheduler, CI, or another automation runner. AlertBot keeps local JSON state so it can recognize data it has already alerted on.
 
+![AlertBot Diagram](diagram.svg "BHE-AlertBot")
+
 ## Prerequisites
 
 - Python 3.9 or later.
