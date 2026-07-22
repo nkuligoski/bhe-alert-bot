@@ -86,7 +86,8 @@ Here is a minimal configuration:
   },
   "state_path": "alertbot.state.json",
   "first_run_behavior": "baseline",
-  "dedupe_mode": "group",
+  "dedupe_mode": "finding",
+  "principal_display": "display_name",
   "page_size": 500,
   "log_level": "INFO"
 }
@@ -94,8 +95,8 @@ Here is a minimal configuration:
 
 AlertBot groups webhook payloads by the Attack Path types that BHE returns. `dedupe_mode` controls what it remembers:
 
-- `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline. This is the default.
-- `finding`: track individual finding rows within each grouped Attack Path. The first payload for a group includes all unrecorded findings, and later payloads include only newly observed finding rows.
+- `group`: track each domain, asset group tag, and Attack Path type as alerted after the first successful delivery or baseline.
+- `finding`: track individual finding rows within each grouped Attack Path. The first payload for a group includes all unrecorded findings, and later payloads include only newly observed finding rows. This is the default.
 
 `webhook.provider` controls the delivery format:
 
@@ -122,7 +123,8 @@ Slack incoming webhook URLs usually use `hooks.slack.com` or `hooks.slack-gov.co
 | `asset_group_tags.selected_tags` | — | Objects with an `id` and optional `name`; required when the mode is `selected`. Include ID `0` explicitly to monitor the default/hygiene tag. |
 | `state_path` | `alertbot.state.json` | Persistent JSON file used for deduplication. Relative paths are resolved relative to the config file. |
 | `first_run_behavior` | `baseline` | `baseline` records existing findings without alerting; `alert` delivers them on the first real run. |
-| `dedupe_mode` | `group` | `group` alerts once per domain/tag/Attack Path type; `finding` alerts newly observed rows within those groups. |
+| `dedupe_mode` | `finding` | `group` alerts once per domain/tag/Attack Path type; `finding` alerts newly observed rows within those groups. |
+| `principal_display` | `display_name` | Value for each finding's `from` and `to`: `object_id` or `display_name`. Display names use the BHE detail row's `from_principal_name` and `to_principal_name` fields, falling back to object IDs when absent. |
 | `page_size` | `500` | Number of BHE finding-detail rows requested per page; must be at least `1`. |
 | `log_level` | `INFO` | Python log level for the process. |
 

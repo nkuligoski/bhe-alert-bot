@@ -24,6 +24,20 @@ OBJECT_FIELDS = (
     "AssetName",
 )
 MAX_FINDINGS = 3
+SOURCE_PRINCIPAL_ID_FIELDS = ("FromPrincipal", "from_principal")
+TARGET_PRINCIPAL_ID_FIELDS = ("ToPrincipal", "to_principal")
+SOURCE_PRINCIPAL_DISPLAY_NAME_FIELDS = (
+    "FromPrincipalName",
+    "from_principal_name",
+    "FromPrincipalDisplayName",
+    "from_principal_display_name",
+)
+TARGET_PRINCIPAL_DISPLAY_NAME_FIELDS = (
+    "ToPrincipalName",
+    "to_principal_name",
+    "ToPrincipalDisplayName",
+    "to_principal_display_name",
+)
 
 
 def _field(row: Dict[str, Any], name: Optional[str]) -> Optional[Any]:
@@ -45,11 +59,24 @@ def _first_field(row: Dict[str, Any], names: tuple[str, ...]) -> Optional[Any]:
     return None
 
 
-def _derived_summary(row: Dict[str, Any]) -> Optional[str]:
+def _principal_value(row: Dict[str, Any], direction: str, config: AlertBotConfig) -> Optional[Any]:
+    """Return an ID or display name for a source or target principal."""
+    id_fields = SOURCE_PRINCIPAL_ID_FIELDS if direction == "from" else TARGET_PRINCIPAL_ID_FIELDS
+    display_name_fields = (
+        SOURCE_PRINCIPAL_DISPLAY_NAME_FIELDS
+        if direction == "from"
+        else TARGET_PRINCIPAL_DISPLAY_NAME_FIELDS
+    )
+    if config.principal_display == "display_name":
+        return _first_field(row, display_name_fields) or _first_field(row, id_fields)
+    return _first_field(row, id_fields)
+
+
+def _derived_summary(row: Dict[str, Any], config: AlertBotConfig) -> Optional[str]:
     """Build a human-readable summary from relationship or object-only detail rows."""
-    from_principal = _field(row, "FromPrincipal")
+    from_principal = _principal_value(row, "from", config)
     finding = _field(row, "Finding")
-    to_principal = _field(row, "ToPrincipal")
+    to_principal = _principal_value(row, "to", config)
     affected_object = _first_field(row, OBJECT_FIELDS)
 
     if from_principal and finding and to_principal:
@@ -69,16 +96,6 @@ def _pluralize(count: int, singular: str, plural: Optional[str] = None) -> str:
     return f"{count} {label}"
 
 
-def _distinct_count(rows: list[Dict[str, Any]], field_name: str) -> int:
-    """Count distinct non-empty values for a single field across rows."""
-    return len({
-        str(value)
-        for row in rows
-        for value in [_field(row, field_name)]
-        if value is not None
-    })
-
-
 def _distinct_any_field_count(rows: list[Dict[str, Any]], field_names: tuple[str, ...]) -> int:
     """Count distinct entities using the first populated field from several candidates."""
     return len({
@@ -89,16 +106,16 @@ def _distinct_any_field_count(rows: list[Dict[str, Any]], field_names: tuple[str
     })
 
 
-def _compact_finding(row: Dict[str, Any]) -> Dict[str, Any]:
+def _compact_finding(row: Dict[str, Any], config: AlertBotConfig) -> Dict[str, Any]:
     """Convert a raw BHE detail row into a small webhook-safe finding object."""
     return {
         "id": _first_field(row, FINDING_ID_FIELDS),
-        "from": _field(row, "FromPrincipal"),
-        "to": _field(row, "ToPrincipal"),
+        "from": _principal_value(row, "from", config),
+        "to": _principal_value(row, "to", config),
         "object": _first_field(row, OBJECT_FIELDS),
         "title": _first_field(row, TITLE_FIELDS),
         "severity": _first_field(row, SEVERITY_FIELDS),
-        "summary": _first_field(row, SUMMARY_FIELDS) or _derived_summary(row),
+        "summary": _first_field(row, SUMMARY_FIELDS) or _derived_summary(row, config),
     }
 
 
@@ -107,8 +124,8 @@ def _group_summary(group: AttackPathGroup) -> Optional[str]:
     if len(group.findings) <= 1:
         return None
 
-    source_count = _distinct_count(group.findings, "FromPrincipal")
-    target_count = _distinct_count(group.findings, "ToPrincipal")
+    source_count = _distinct_any_field_count(group.findings, SOURCE_PRINCIPAL_ID_FIELDS)
+    target_count = _distinct_any_field_count(group.findings, TARGET_PRINCIPAL_ID_FIELDS)
     object_count = _distinct_any_field_count(group.findings, OBJECT_FIELDS)
     parts = [
         f"{_pluralize(len(group.findings), 'finding')} for {group.attack_path_type}",
@@ -156,13 +173,17 @@ def build_alert_payload(
     observed_at = _first_field(first_row, OBSERVED_AT_FIELDS)
     severity = _first_field(first_row, SEVERITY_FIELDS)
     title = _first_field(first_row, TITLE_FIELDS) or f"{group.attack_path_type} Attack Path"
-    summary = _group_summary(group) or _first_field(first_row, SUMMARY_FIELDS) or _derived_summary(first_row)
+    summary = (
+        _group_summary(group)
+        or _first_field(first_row, SUMMARY_FIELDS)
+        or _derived_summary(first_row, config)
+    )
     url = _first_field(first_row, URL_FIELDS) or _graph_url(group, config)
 
-    source_count = _distinct_count(group.findings, "FromPrincipal")
-    target_count = _distinct_count(group.findings, "ToPrincipal")
+    source_count = _distinct_any_field_count(group.findings, SOURCE_PRINCIPAL_ID_FIELDS)
+    target_count = _distinct_any_field_count(group.findings, TARGET_PRINCIPAL_ID_FIELDS)
     object_count = _distinct_any_field_count(group.findings, OBJECT_FIELDS)
-    findings = [_compact_finding(row) for row in group.findings[:MAX_FINDINGS]]
+    findings = [_compact_finding(row, config) for row in group.findings[:MAX_FINDINGS]]
 
     return {
         "source": "bloodhound-enterprise-alertbot",

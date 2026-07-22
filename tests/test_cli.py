@@ -182,6 +182,7 @@ def test_setup_accepts_number_lists_for_domain_and_asset_group_tag_selection(
             "",
             "",
             "",
+            "",
             "1,2",
         ]
     )
@@ -210,6 +211,8 @@ def test_setup_accepts_number_lists_for_domain_and_asset_group_tag_selection(
             {"id": 3, "name": "Server Tier"},
         ],
     }
+    assert config_data["dedupe_mode"] == "finding"
+    assert config_data["principal_display"] == "display_name"
 
 
 def test_setup_prints_unsuccessful_api_connection_status_for_non_enterprise(

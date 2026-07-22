@@ -74,6 +74,67 @@ def test_build_alert_payload_uses_details_endpoint_fields():
     assert payload["findings"][0]["summary"] == "alice@example.local -> Path Type -> server01.example.local"
 
 
+def test_build_alert_payload_uses_display_names_when_configured():
+    group = AttackPathGroup(
+        state_key="domain:Path Type",
+        attack_path_id="Path Type",
+        domain=DomainInfo(id="domain", name="example.local"),
+        attack_path_type="Path Type",
+        findings=[
+            {
+                "id": 1,
+                "from_principal": "S-1-5-21-source",
+                "from_principal_name": "Alice Example",
+                "to_principal": "S-1-5-21-target",
+                "to_principal_name": "Server 01",
+                "Finding": "Path Type",
+            }
+        ],
+    )
+    config = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+            "principal_display": "display_name",
+        }
+    )
+
+    payload = build_alert_payload(group, config, alerted_at="2026-06-18T00:00:00Z")
+
+    assert payload["findings"][0]["from"] == "Alice Example"
+    assert payload["findings"][0]["to"] == "Server 01"
+    assert payload["findings"][0]["summary"] == "Alice Example -> Path Type -> Server 01"
+
+
+def test_build_alert_payload_falls_back_to_object_ids_when_display_names_are_missing():
+    group = AttackPathGroup(
+        state_key="domain:Path Type",
+        attack_path_id="Path Type",
+        domain=DomainInfo(id="domain", name="example.local"),
+        attack_path_type="Path Type",
+        findings=[
+            {
+                "id": 1,
+                "from_principal": "S-1-5-21-source",
+                "to_principal": "S-1-5-21-target",
+                "Finding": "Path Type",
+            }
+        ],
+    )
+    config = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+            "principal_display": "display_name",
+        }
+    )
+
+    payload = build_alert_payload(group, config, alerted_at="2026-06-18T00:00:00Z")
+
+    assert payload["findings"][0]["from"] == "S-1-5-21-source"
+    assert payload["findings"][0]["to"] == "S-1-5-21-target"
+
+
 def test_build_alert_payload_summarizes_multiple_findings():
     group = AttackPathGroup(
         state_key="domain:Path Type",

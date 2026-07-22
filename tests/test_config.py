@@ -82,23 +82,53 @@ def test_asset_group_tags_all_mode_does_not_require_selected_tags():
     assert config.asset_group_tags.selected_tags == []
 
 
-def test_dedupe_mode_defaults_to_group_and_accepts_finding():
+def test_dedupe_mode_defaults_to_finding_and_accepts_group():
     default = config_from_dict(
         {
             "bhe": {"tenant": "tenant.example"},
             "webhook": {"url": "https://webhook.example"},
         }
     )
-    finding = config_from_dict(
+    group = config_from_dict(
         {
             "bhe": {"tenant": "tenant.example"},
             "webhook": {"url": "https://webhook.example"},
-            "dedupe_mode": "finding",
+            "dedupe_mode": "group",
         }
     )
 
-    assert default.dedupe_mode == "group"
-    assert finding.dedupe_mode == "finding"
+    assert default.dedupe_mode == "finding"
+    assert group.dedupe_mode == "group"
+
+
+def test_principal_display_defaults_to_display_name_and_accepts_object_id():
+    default = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+        }
+    )
+    object_id = config_from_dict(
+        {
+            "bhe": {"tenant": "tenant.example"},
+            "webhook": {"url": "https://webhook.example"},
+            "principal_display": "object_id",
+        }
+    )
+
+    assert default.principal_display == "display_name"
+    assert object_id.principal_display == "object_id"
+
+
+def test_invalid_principal_display_is_rejected():
+    with pytest.raises(ConfigError):
+        config_from_dict(
+            {
+                "bhe": {"tenant": "tenant.example"},
+                "webhook": {"url": "https://webhook.example"},
+                "principal_display": "both",
+            }
+        )
 
 
 def test_webhook_provider_defaults_to_auto_and_accepts_slack():

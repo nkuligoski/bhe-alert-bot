@@ -261,7 +261,10 @@ def _run_setup(args: argparse.Namespace) -> int:
     webhook_url = _prompt("Webhook URL")
     state_path = _prompt("State file path", "alertbot.state.json")
     first_run_behavior = _prompt_choice("First run behavior", ["baseline", "alert"], "baseline")
-    dedupe_mode = _prompt_choice("Deduplication mode", ["group", "finding"], "group")
+    dedupe_mode = _prompt_choice("Deduplication mode", ["finding", "group"], "finding")
+    principal_display = _prompt_choice(
+        "Principal values in alerts", ["display_name", "object_id"], "display_name"
+    )
     asset_group_tags = _prompt_asset_group_tags(client)
 
     config = AlertBotConfig(
@@ -272,6 +275,7 @@ def _run_setup(args: argparse.Namespace) -> int:
         state_path=state_path,
         first_run_behavior=first_run_behavior,
         dedupe_mode=dedupe_mode,
+        principal_display=principal_display,
     )
     write_config(config, config_path)
 
